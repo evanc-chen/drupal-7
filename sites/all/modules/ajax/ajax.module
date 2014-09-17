@@ -1,0 +1,197 @@
+<?php
+
+/**
+ * Implement of hook_menu.
+ */
+/* function ajax_menu () {
+
+} */
+
+/**
+ * Implement of hook_block_info.
+ *
+ */
+function ajax_init() {
+  /* global $user;
+  $user = user_load(1);
+  user_login_finalize(); */
+	
+}
+
+function ajax_block_info() {
+  $blocks['ajax_wuji']['info'] = t('ajax wuji'); //必须使用英文，用中文会无法显示
+  $blocks['ajax_wuji']['cache'] = DRUPAL_NO_CACHE;
+  $blocks['ajax_wuji']['properties']['administrative'] = TRUE;
+	
+	$blocks['language_switch']['info'] = t('switch language'); 
+  $blocks['language_switch']['cache'] = DRUPAL_NO_CACHE;
+  $blocks['language_switch']['properties']['administrative'] = TRUE;
+  return $blocks;
+}
+/**
+ * Implement of hook_block_view.
+ *
+ */
+function ajax_block_view($delta = '') {
+  // This example is adapted from node.module.
+  $block = array();
+  switch ($delta) {
+    case 'ajax_wuji':
+      $block['content'] = '<div id=ajax_wuji_replace >'. drupal_render(drupal_get_form('ajax_wuji_block_form')) .'</div>';
+      //$block['content'] = '<div id=ajax_wuji_replace >'. drupal_render(drupal_get_form(ajax_example_autocheckboxes)) .'</div>';
+      break;
+		case 'language_switch':
+      $block['content'] = ajax_language_switcher();
+      break;
+ }
+  return $block;
+}
+
+function get_city ($form, $form_state) {
+ return '<div id=ajax_wuji_replace >'.drupal_render($form) .'</div>';
+}
+
+function get_county ($form, $form_state) {
+ return '<div id=ajax_wuji_replace >'.drupal_render($form) .'</div>';
+}
+
+/**
+ * Implement of hook_js_alter.
+ * 增加一个js只需要使用drupal_add_js
+ */
+/* function ajax_js_alter (&$javascript) {
+  drupal_add_js('misc/ajax.js');
+} */
+
+function ajax_taxonomy_get_children ($vid, $parent, $max_depth) {
+  $children = taxonomy_get_tree($vid, $parent, $max_depth);
+ $option_children = array();
+ foreach ($children as $child) {
+  $option_children[$child->tid] = $child->name;
+ }
+ return $option_children;
+}
+
+
+function ajax_wuji_block_form ($form, &$form_state) {
+  //drupal_add_js('misc/ajax.js');
+ $vid = 2;
+ $parent = 0;
+ $max_depth = 1;
+ $provinces = ajax_taxonomy_get_children($vid, $parent, $max_depth);
+ $provinces_tid = array_keys($provinces);
+ //检查当前是否选中省份
+ $province_selected = isset($form_state['values']['province']) ? intval($form_state['values']['province']) : $provinces_tid[0];
+ $form['ajax_wuji'] = array(
+    '#type' => 'fieldset',
+    '#title' => 'Unlimited connection',
+  );
+ $form['ajax_wuji']['province'] = array(
+  '#type' => 'select',
+  '#title' => t('province'),
+  '#options' => $provinces,
+  '#default_value' => $provinces[$province_selected],
+  '#ajax' => array(
+      'callback' => 'get_city',
+      'wrapper' => 'ajax_wuji_replace',
+    ),
+ );
+ 
+ $citys = ajax_taxonomy_get_children($vid, $province_selected, $max_depth);
+ $citys_tid = array_keys($citys);
+ $city_selected = isset($form_state['values']['city']) ? intval($form_state['values']['city']) : $citys_tid[0];
+ $city_selected_parent = taxonomy_get_parents($city_selected);
+ //检查当前选中的城市的省份和当前省份是否一致，当更改省份时会出现不一致
+ $city_selected = (intval($city_selected_parent[1]->tid) == $province_selected) ? $city_selected : $citys_tid[0];
+ $form['ajax_wuji']['city'] = array(
+  '#type' => 'select',
+  '#title' => t('city'),
+  '#options' => $citys,
+  //'#prefix' => '<div id="ajax_wuji_replace">', //为select设置id
+  //'#suffix' => '</div>',
+  '#default_value' => array_key_exists($city_selected, $citys)? $citys[$city_selected] :"",
+  '#ajax' => array(
+      'callback' => 'get_county',
+      'wrapper' => 'ajax_wuji_replace',
+    ),
+  );
+ 
+ $countys = ajax_taxonomy_get_children($vid, $city_selected, $max_depth);
+ $countys_tid = array_keys($countys);
+ $county_selected = isset($form_state['values']['county']) ? intval($form_state['values']['county']) : $countys_tid[0];
+ $form['ajax_wuji']['county'] = array(
+  '#type' => 'select',
+  '#title' => t('county'),
+  '#options' => $countys,
+  '#default_value' => array_key_exists($county_selected, $countys)? $countys[$county_selected] : "",
+  );
+ 
+return $form;
+}
+
+function ajax_language_switcher() {
+// Create a drop down menu
+  global $language ;
+	$languages = language_switcher_enabled_languages();
+  $links = array();
+	
+  $lang_name = $language->language ;
+	foreach ($languages as $enabled_language) {
+		if ($lang_name != $enabled_language['langcode']) {
+			$links[] = array('title' => t($enabled_language['native']), 'href' => $enabled_language['langcode'], 'attributes' => array('class' => array($enabled_language['langcode'], 'locale-item')));
+		}
+	}
+  $output = theme('ajax_dropdown', array('title' => t($language->native), 'links' => $links, 'class' => $lang_name. ' locale-item'));
+  return $output;
+}
+
+function language_switcher_enabled_languages() {
+  $enabled = language_list('enabled');
+  $enabled = $enabled[1];
+  $languages = array();
+
+  foreach ($enabled as $langcode => $language) {
+    $languages[$langcode]['langcode'] = $langcode;
+    $languages[$langcode]['native'] = $language->native;
+  }
+
+  return $languages;
+}
+
+
+/**
+ * Delegated implementation of hook_theme()
+*/
+function ajax_theme() {
+  return array(
+  'ajax_dropdown' => array(
+      'variables' => array('title' => NULL, 'links' => NULL, 'image' => FALSE, 'class' => ''),
+    )
+	);
+} 
+
+function theme_ajax_dropdown($vars) { 
+  // Provide a unique identifier for every dropdown on the page.
+  static $id = 0;
+  $id++;
+  $class = 'ctools-dropdown-no-js ctools-dropdown';
+
+  drupal_add_js(drupal_get_path('module', 'ajax'). '/ajax.js');
+  drupal_add_css(drupal_get_path('module', 'ajax'). '/css/custom.css');
+
+  $output = '';
+
+  $output .= '<div class="' . $class . '" id="ctools-dropdown-' . $id . '">';
+  $output .= '<div class="ctools-dropdown-link-wrapper">';
+
+  $output .= '<a href="#" class="ctools-dropdown-link ctools-dropdown-text-link'.($vars['class'] ? (' ' . $vars['class']) : ''). '">' . check_plain($vars['title']) . '</a>';
+
+  $output .= '</div>'; // wrapper
+  $output .= '<div class="ctools-dropdown-container-wrapper">';
+  $output .= '<div class="ctools-dropdown-container">';
+  $output .= theme_links(array('links' => $vars['links'], 'attributes' => array(), 'heading' => ''));
+  $output .= '</div>'; // container
+  $output .= '</div>'; // container wrapper
+  $output .= '</div>'; // dropdown
+  return $output;
+}
